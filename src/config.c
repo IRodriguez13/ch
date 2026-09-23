@@ -34,9 +34,11 @@ void ch_config_usage(FILE *out)
 		"      --unstaged       only unstaged changes (git diff)\n"
 		"  -2, --two-dot        branch name -> branch..HEAD\n"
 		"  -x, --exact          git diff REF -- (single tree, no range)\n"
-		"  -q, --quiet          only added text, no header or line numbers\n"
-		"  -0, --plain          with -q: omit leading '+' on each line\n"
+		"  -q, --quiet          only changed text, no header or line numbers\n"
+		"  -0, --plain          with -q: omit leading +/- on each line\n"
+		"  -d, --removed        also show removed lines (-), in diff order\n"
 		"  -h, --help           show this help\n"
+		"  -V, --version        show version and license\n"
 		"\n"
 		"Examples:\n"
 		"  ch-adds dojo/home/views.py\n"
@@ -112,14 +114,16 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		{"exact", no_argument, NULL, 'x'},
 		{"quiet", no_argument, NULL, 'q'},
 		{"plain", no_argument, NULL, '0'},
+		{"removed", no_argument, NULL, 'd'},
 		{"help", no_argument, NULL, 'h'},
+		{"version", no_argument, NULL, 'V'},
 		{NULL, 0, NULL, 0}
 	};
 	int positional = 0;
 	int opt;
 
 	ch_config_init(cfg);
-	while ((opt = getopt_long(argc, argv, "r:p:2xq0hSU", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "r:p:2xq0dhSUV", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'r':
 			snprintf(cfg->ref, sizeof(cfg->ref), "%s", optarg);
@@ -146,8 +150,14 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		case '0':
 			cfg->plain = true;
 			break;
+		case 'd':
+			cfg->show_removed = true;
+			break;
 		case 'h':
 			cfg->show_help = true;
+			return 0;
+		case 'V':
+			cfg->show_version = true;
 			return 0;
 		default:
 			return 1;
@@ -164,10 +174,12 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		}
 		positional++;
 	}
-	if (positional == 0) {
+	if (positional == 0 && !cfg->show_help && !cfg->show_version) {
 		ch_config_usage(stderr);
 		return 1;
 	}
+	if (positional == 0)
+		return 0;
 	if (cfg->mode != CH_MODE_PATCH && strlen(cfg->patch_path) == 0 &&
 	    strstr(cfg->ref, ".patch") != NULL) {
 		snprintf(cfg->patch_path, sizeof(cfg->patch_path), "%s", cfg->ref);

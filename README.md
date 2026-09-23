@@ -36,9 +36,35 @@ ch-adds path/to/file.py --staged
 ch-adds path/to/file.py --unstaged
 ch-adds path/to/file.py -p fix.patch
 ch-adds path/to/file.py develop -q      # pipe-friendly
+ch-adds path/to/file.py --removed       # + and - lines, diff order
 ```
 
 See `man ch-adds` after install.
+
+## Shell completions
+
+`make install` installs completions for **bash**, **zsh**, and **fish** under
+`$PREFIX/share/…`. The `ch` alias is covered too (`complete … ch` / `#compdef ch` /
+`complete --wraps ch-adds -c ch`).
+
+| Shell | Path (default `PREFIX=~/.local`) |
+|-------|----------------------------------|
+| bash  | `~/.local/share/bash-completion/completions/ch-adds` |
+| zsh   | `~/.local/share/zsh/site-functions/_ch-adds` |
+| fish  | `~/.local/share/fish/vendor_completions.d/ch-adds.fish` |
+
+**bash** — requires the `bash-completion` package; user installs usually work out of the box.
+
+**zsh** — add to `~/.zshrc` before `compinit`:
+
+```bash
+fpath=(~/.local/share/zsh/site-functions $fpath)
+autoload -Uz compinit && compinit
+```
+
+**fish** — vendor completions load automatically; restart the shell or run `fish -c ch-adds<Tab>`.
+
+Tab-complete: flags, file paths, git branches/tags (`HEAD`, `develop`, …), and `.patch` files.
 
 ## Example output
 
@@ -48,6 +74,17 @@ See `man ch-adds` after install.
 │ +1 line(s)
 └────────────────────────────────────────
      4 │ +gesvulImage: docker-registry.../gesvul:4.8.22
+```
+
+With `--removed` (same box, removals in red, additions in green):
+
+```text
+┌─ src/foo.py
+│ ref: develop...HEAD
+│ +1  -1 change(s)
+└────────────────────────────────────────
+    12 │ -old_call()
+    12 │ +new_call()
 ```
 
 ## Build / test
@@ -69,4 +106,4 @@ make uninstall PREFIX=$HOME/.local
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPLv3+ — see [LICENSE](LICENSE).

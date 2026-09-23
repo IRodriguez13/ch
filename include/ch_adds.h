@@ -32,6 +32,8 @@ typedef struct {
 	bool two_dot;
 	bool exact_ref;
 	bool show_help;
+	bool show_version;
+	bool show_removed;
 } ch_config_t;
 
 int ch_config_parse(ch_config_t *cfg, int argc, char **argv);
@@ -41,7 +43,8 @@ void ch_config_usage(FILE *out);
 int ch_git_diff(const ch_config_t *cfg, char **out);
 int ch_patch_extract(const ch_config_t *cfg, char **out);
 
-int ch_render_additions(const ch_config_t *cfg, const char *diff_text, int *count_out);
+int ch_render_changes(const ch_config_t *cfg, const char *diff_text,
+		      int *add_count_out, int *rem_count_out);
 
 void ch_normalize_path(const char *in, char *out, size_t out_sz);
 bool ch_file_exists(const char *path);

@@ -1,6 +1,6 @@
 *.o
 *.a
-ch-adds
+/ch-adds
 /build/
 *.core
 *.swp

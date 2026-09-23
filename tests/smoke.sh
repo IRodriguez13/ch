@@ -26,4 +26,13 @@ echo "line three" >> sample.txt
 out="$("$BIN" sample.txt -q -0)"
 [[ "$out" == "line three" ]] || { echo "FAIL: expected added line"; echo "$out"; exit 1; }
 
+sed -i '/line two/d' sample.txt
+
+out="$("$BIN" sample.txt --removed -q)"
+[[ "$out" == $'-line two\n+line three' ]] || {
+	echo "FAIL: expected removal then addition"
+	echo "$out"
+	exit 1
+}
+
 echo "smoke OK"

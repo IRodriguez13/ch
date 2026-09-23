@@ -1,4 +1,4 @@
-.TH CH-ADDS 1 "September 2026" "ch-adds 1.0.0" "User Commands"
+.TH CH-ADDS 1 "September 2026" "ch-adds 1.1.0" "User Commands"
 .SH NAME
 ch-adds \- show only added lines from a file diff
 .SH SYNOPSIS
@@ -51,10 +51,17 @@ Diff directly against \fIREF\fR (single tree).
 Print only added lines (no header or line numbers).
 .TP
 .BR \-0 ", " \-\-plain
-With \fB\-q\fR, omit the leading \fB+\fR on each line.
+With \fB\-q\fR, omit the leading \fB+\fR/\fB\-\fR on each line.
+.TP
+.BR \-d ", " \-\-removed
+Also show removed lines (\fB\-\fR), in unified-diff order. Removals use the
+old-file line number and red highlighting; additions stay green.
 .TP
 .BR \-h ", " \-\-help
 Show usage and exit.
+.TP
+.BR \-V ", " \-\-version
+Show version, license, and source URL.
 .SH ENVIRONMENT
 .TP
 .B NO_COLOR

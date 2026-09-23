@@ -1,0 +1,71 @@
+.TH CH-ADDS 1 "September 2026" "ch-adds 1.0.0" "User Commands"
+.SH NAME
+ch-adds \- show only added lines from a file diff
+.SH SYNOPSIS
+.B ch-adds
+.I file
+[\fIreference\fR]
+[\fIoptions\fR]
+.SH DESCRIPTION
+.B ch-adds
+prints only added lines (\fB+\fR) from a unified diff, without context or removed
+lines. It is a focused viewer for "what did I add in this file?" — not a
+replacement for \fBgit diff\fR.
+.PP
+By default it compares the working tree and staged changes against \fBHEAD\fR.
+.SH REFERENCES
+.TP
+.B HEAD
+Working tree + staged vs last commit.
+.TP
+\fIcommit\fR, \fItag\fR
+\fBgit diff\fR \fIref\fR \fB\-\-\fR \fIfile\fR when \fB\-\-exact\fR is used; otherwise
+\fIref\fR...\fBHEAD\fR (3-dot, merge-request style).
+.TP
+\fIbranch\fR..\fBHEAD\fR, \fIbranch\fR...\fBHEAD\fR
+Explicit git revision ranges.
+.TP
+\fIfile.patch\fR
+Extract added lines for \fIfile\fR from a patch file (\fB\-p\fR).
+.SH OPTIONS
+.TP
+.BR \-r ", " \-\-ref " \fIREF\fR
+Reference (same semantics as the optional second argument).
+.TP
+.BR \-p ", " \-\-patch " \fIFILE\fR
+Read from a patch file instead of git. Use \fB\-\fR for stdin.
+.TP
+.B \-\-staged
+Only staged changes (\fBgit diff \-\-cached\fR).
+.TP
+.B \-\-unstaged
+Only unstaged changes (\fBgit diff\fR without \fB\-\-cached\fR).
+.TP
+.BR \-2 ", " \-\-two-dot
+With a branch name, use \fIbranch\fR..\fBHEAD\fR instead of 3-dot.
+.TP
+.BR \-x ", " \-\-exact
+Diff directly against \fIREF\fR (single tree).
+.TP
+.BR \-q ", " \-\-quiet
+Print only added lines (no header or line numbers).
+.TP
+.BR \-0 ", " \-\-plain
+With \fB\-q\fR, omit the leading \fB+\fR on each line.
+.TP
+.BR \-h ", " \-\-help
+Show usage and exit.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+When set, disable ANSI color output.
+.SH EXAMPLES
+.nf
+ch-adds src/main.c
+ch-adds k8s/pre/all/values.yaml develop
+ch-adds src/main.c --staged
+ch-adds src/main.c -p series.patch
+ch-adds src/main.c develop -q | xclip -selection clipboard
+.fi
+.SH SEE ALSO
+.BR git-diff (1)

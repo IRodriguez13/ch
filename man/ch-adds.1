@@ -1,11 +1,16 @@
-.TH CH-ADDS 1 "September 2026" "ch-adds 1.1.0" "User Commands"
+.TH CH-ADDS 1 "September 2026" "ch-adds 1.2.0" "User Commands"
 .SH NAME
 ch-adds \- show only added lines from a file diff
 .SH SYNOPSIS
 .B ch-adds
-.I file
+[\fIfile\fR...]
 [\fIreference\fR]
 [\fIoptions\fR]
+.PP
+.B ch-adds
+[\fIoptions\fR]
+.br
+(with no \fIfile\fR: all changed paths in the git repository)
 .SH DESCRIPTION
 .B ch-adds
 prints only added lines (\fB+\fR) from a unified diff, without context or removed
@@ -56,6 +61,10 @@ With \fB\-q\fR, omit the leading \fB+\fR/\fB\-\fR on each line.
 .BR \-d ", " \-\-removed
 Also show removed lines (\fB\-\fR), in unified-diff order. Removals use the
 old-file line number and red highlighting; additions stay green.
+.TP
+.BR \-a ", " \-\-all
+All changed files in the repository (same as omitting \fIfile\fR).
+Multiple \fIfile\fR arguments are also supported.
 .TP
 .BR \-h ", " \-\-help
 Show usage and exit.

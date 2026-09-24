@@ -19,6 +19,7 @@ function __ch_adds_complete --description 'Shared ch-adds/ch completions'
 	complete -c $cmd -s q -l quiet -d 'No header or line numbers'
 	complete -c $cmd -s 0 -l plain -d 'With -q: omit +/- prefixes'
 	complete -c $cmd -s d -l removed -d 'Also show removed lines'
+	complete -c $cmd -s a -l all -d 'All changed files in repo'
 	complete -c $cmd -s h -l help -d 'Show help'
 	complete -c $cmd -s V -l version -d 'Show version and license'
 	complete -c $cmd -F

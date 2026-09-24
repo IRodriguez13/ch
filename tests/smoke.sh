@@ -35,4 +35,15 @@ out="$("$BIN" sample.txt --removed -q)"
 	exit 1
 }
 
+cat > other.txt <<'EOF'
+alpha
+EOF
+git add other.txt
+git commit -q -m "other"
+echo "beta" >> other.txt
+
+out="$("$BIN" -a -q -0)"
+echo "$out" | grep -qx 'line three' || { echo "FAIL: --all missing sample.txt addition"; echo "$out"; exit 1; }
+echo "$out" | grep -qx 'beta' || { echo "FAIL: --all missing other.txt addition"; echo "$out"; exit 1; }
+
 echo "smoke OK"

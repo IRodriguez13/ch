@@ -141,6 +141,126 @@ static void print_changes(const ch_config_t *cfg, const char *diff_text)
 	free(copy);
 }
 
+bool ch_diff_has_relevant_lines(const ch_config_t *cfg, const char *diff_text)
+{
+	char *copy = strdup(diff_text ? diff_text : "");
+	char *save = NULL;
+	char *line;
+	bool found = false;
+
+	if (!copy)
+		return false;
+	line = strtok_r(copy, "\n", &save);
+	while (line) {
+		if (line_is_addition(line))
+			found = true;
+		else if (cfg->show_removed && line_is_removal(line))
+			found = true;
+		if (found)
+			break;
+		line = strtok_r(NULL, "\n", &save);
+	}
+	free(copy);
+	return found;
+}
+
+static bool diff_line_is_meta(const char *line)
+{
+	return strncmp(line, "diff --git ", 11) == 0 ||
+	       strncmp(line, "index ", 6) == 0 ||
+	       strncmp(line, "--- ", 4) == 0 ||
+	       strncmp(line, "+++ ", 4) == 0 ||
+	       strncmp(line, "Binary files ", 13) == 0;
+}
+
+static int append_section_line(char **buf, size_t *len, size_t *cap, const char *line)
+{
+	size_t llen = strlen(line) + 1;
+
+	while (*len + llen + 1 >= *cap) {
+		size_t ncap = *cap ? *cap * 2 : 4096;
+		char *nbuf = realloc(*buf, ncap);
+
+		if (!nbuf)
+			return -1;
+		*buf = nbuf;
+		*cap = ncap;
+	}
+	memcpy(*buf + *len, line, strlen(line));
+	*len += strlen(line);
+	(*buf)[(*len)++] = '\n';
+	(*buf)[*len] = '\0';
+	return 0;
+}
+
+static void flush_file_section(const ch_config_t *cfg, const char *path, char **section,
+			       size_t *slen, size_t *scap, bool *first_out)
+{
+	ch_config_t file_cfg;
+
+	if (!path || !*path || !section || !*section)
+		return;
+	if (!ch_diff_has_relevant_lines(cfg, *section))
+		goto reset;
+	if (cfg->quiet && !*first_out)
+		printf("\n");
+	if (cfg->quiet)
+		printf("%s\n", path);
+	file_cfg = *cfg;
+	snprintf(file_cfg.file, sizeof(file_cfg.file), "%s", path);
+	ch_render_changes(&file_cfg, *section, NULL, NULL);
+	if (!cfg->quiet && !*first_out)
+		printf("\n");
+	*first_out = false;
+reset:
+	free(*section);
+	*section = NULL;
+	*slen = 0;
+	if (scap)
+		*scap = 0;
+}
+
+int ch_render_repo_diff(const ch_config_t *cfg, const char *diff_text)
+{
+	char *copy = strdup(diff_text ? diff_text : "");
+	char *save = NULL;
+	char *line;
+	char current[CH_PATH_MAX] = "";
+	char *section = NULL;
+	size_t slen = 0;
+	size_t scap = 0;
+	bool first = true;
+
+	if (!copy)
+		return 0;
+	line = strtok_r(copy, "\n", &save);
+	while (line) {
+		if (strncmp(line, "diff --git ", 11) == 0) {
+			const char *bpath = strstr(line, " b/");
+
+			flush_file_section(cfg, current[0] ? current : NULL, &section, &slen,
+					   &scap, &first);
+			current[0] = '\0';
+			if (bpath)
+				snprintf(current, sizeof(current), "%s", bpath + 2);
+		} else if (current[0] && strncmp(line, "+++ b/", 6) == 0) {
+			snprintf(current, sizeof(current), "%s", line + 6);
+		} else if (current[0] && !diff_line_is_meta(line)) {
+			if (append_section_line(&section, &slen, &scap, line) != 0) {
+				free(section);
+				free(copy);
+				return 1;
+			}
+		}
+		line = strtok_r(NULL, "\n", &save);
+	}
+	flush_file_section(cfg, current[0] ? current : NULL, &section, &slen, &scap,
+			   &first);
+	free(section);
+	free(copy);
+	return 0;
+}
+
 int ch_render_changes(const ch_config_t *cfg, const char *diff_text,
 		      int *add_count_out, int *rem_count_out)
 {

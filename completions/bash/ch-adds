@@ -18,7 +18,7 @@ _ch_adds()
 	_init_completion || return
 
 	local flags='-r --ref -p --patch --staged --unstaged -2 --two-dot -x --exact
-	             -q --quiet -0 --plain -d --removed -h --help -V --version'
+	             -q --quiet -0 --plain -d --removed -a --all -h --help -V --version'
 
 	case $prev in
 		-h|--help|-V|--version)
@@ -47,7 +47,7 @@ _ch_adds()
 				(( i++ ))
 				continue
 				;;
-			--staged|--unstaged|-2|--two-dot|-x|--exact|-q|--quiet|-0|--plain|-d|--removed|-h|--help|-V|--version)
+			--staged|--unstaged|-2|--two-dot|-x|--exact|-q|--quiet|-0|--plain|-d|--removed|-a|--all|-h|--help|-V|--version)
 				continue
 				;;
 			-*)

@@ -2,7 +2,8 @@
 
 Show **only added lines** (`+`) from a file diff — editor-style, without noise from context or deletions.
 
-Not a git replacement: one job, one file, one question — *what did I add here?*
+Not a git replacement: one job, one question — *what did I add (or remove with `-d`)?*
+Single file by default; **whole repo** when you omit the path or pass `--all`.
 
 ## Install
 
@@ -37,6 +38,9 @@ ch-adds path/to/file.py --unstaged
 ch-adds path/to/file.py -p fix.patch
 ch-adds path/to/file.py develop -q      # pipe-friendly
 ch-adds path/to/file.py --removed       # + and - lines, diff order
+ch -d                                   # all changed files (+ and -)
+ch-adds -a develop                      # all files vs develop...HEAD
+ch-adds Makefile src/main.c             # several explicit paths
 ```
 
 See `man ch-adds` after install.

@@ -38,3 +38,17 @@ int ch_git_diff(const ch_config_t *cfg, char **out)
 	*out = NULL;
 	return run_git_diff_cmd(cfg->git_range, cfg->file, out);
 }
+
+int ch_git_diff_repo(const ch_config_t *cfg, char **out)
+{
+	char cmd[CH_REF_MAX + 128];
+
+	*out = NULL;
+	if (cfg->git_range[0] != '\0')
+		snprintf(cmd, sizeof(cmd), "git diff -U0 %s 2>/dev/null", cfg->git_range);
+	else
+		snprintf(cmd, sizeof(cmd), "git diff -U0 2>/dev/null");
+	if (ch_popen_read(cmd, out) < 0)
+		return -1;
+	return 0;
+}

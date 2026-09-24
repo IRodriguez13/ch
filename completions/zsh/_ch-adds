@@ -25,6 +25,7 @@ _ch_adds() {
 		'(-q --quiet)'{-q,--quiet}'[No header or line numbers]' \
 		'(-0 --plain)'{-0,--plain}'[With -q: omit +/- prefixes]' \
 		'(-d --removed)'{-d,--removed}'[Also show removed lines]' \
+		'(-a --all)'{-a,--all}'[All changed files in repo]' \
 		'(-h --help)'{-h,--help}'[Show help]' \
 		'(-V --version)'{-V,--version}'[Show version and license]' \
 		'1:file:_files' \

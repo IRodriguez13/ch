@@ -1,23 +1,26 @@
-.TH CH-ADDS 1 "September 2026" "ch-adds 1.2.0" "User Commands"
+.TH CH 1 "September 2026" "ch 1.4.0" "User Commands"
 .SH NAME
-ch-adds \- show only added lines from a file diff
+ch \- show only added lines from a file diff
 .SH SYNOPSIS
-.B ch-adds
+.B ch
 [\fIfile\fR...]
 [\fIreference\fR]
 [\fIoptions\fR]
 .PP
-.B ch-adds
+.B ch
 [\fIoptions\fR]
 .br
 (with no \fIfile\fR: all changed paths in the git repository)
 .SH DESCRIPTION
-.B ch-adds
+.B ch
 prints only added lines (\fB+\fR) from a unified diff, without context or removed
 lines. It is a focused viewer for "what did I add in this file?" — not a
 replacement for \fBgit diff\fR.
 .PP
 By default it compares the working tree and staged changes against \fBHEAD\fR.
+.PP
+A literal \fB*\fR argument, or a shell glob that expands to every non-hidden
+entry in the current directory, selects all changed files (same as \fB\-\-all\fR).
 .SH REFERENCES
 .TP
 .B HEAD
@@ -66,6 +69,16 @@ old-file line number and red highlighting; additions stay green.
 All changed files in the repository (same as omitting \fIfile\fR).
 Multiple \fIfile\fR arguments are also supported.
 .TP
+.B \-\-diff
+.I DIR1 DIR2
+Compare two directory trees with \fBdiff\fR \fB-ruN\fR (no shared git history
+required). Shows only \fB+\fR/\fB\-\fR lines with the usual \fBch\fR layout.
+\fB.git\fR is excluded automatically. With \fB\-d\fR enabled by default in
+this mode.
+.TP
+.BR \-\-exclude " \fIPAT\fR"
+Skip \fIPAT\fR in \fB\-\-diff\fR (repeatable). Example: \fB\-\-exclude=related\fR.
+.TP
 .BR \-h ", " \-\-help
 Show usage and exit.
 .TP
@@ -77,11 +90,15 @@ Show version, license, and source URL.
 When set, disable ANSI color output.
 .SH EXAMPLES
 .nf
-ch-adds src/main.c
-ch-adds k8s/pre/all/values.yaml develop
-ch-adds src/main.c --staged
-ch-adds src/main.c -p series.patch
-ch-adds src/main.c develop -q | xclip -selection clipboard
+ch src/main.c
+ch k8s/pre/all/values.yaml develop
+ch src/main.c --staged
+ch src/main.c -p series.patch
+ch -d *
+ch --diff ~/proj-a ~/proj-b dojo/foo.py
+ch --diff ~/mirror ~/laptop -a --exclude=related --exclude=.env
+ch src/main.c develop -q | xclip -selection clipboard
 .fi
 .SH SEE ALSO
+.BR diff (1),
 .BR git-diff (1)

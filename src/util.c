@@ -1,4 +1,4 @@
-#include "ch_adds.h"
+#include "ch.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +35,7 @@ bool ch_color_enabled(void)
 	return isatty(STDOUT_FILENO);
 }
 
-static int read_all_stream(FILE *fp, char **out)
+int ch_read_stream(FILE *fp, char **out)
 {
 	size_t cap = 8192;
 	size_t len = 0;
@@ -70,14 +70,24 @@ int ch_read_file(const char *path, char **out)
 
 	if (!fp)
 		return -1;
-	return read_all_stream(fp, out);
+	return ch_read_stream(fp, out);
 }
 
 int ch_popen_read(const char *cmd, char **out)
 {
 	FILE *fp = popen(cmd, "r");
+	int len;
+	int status;
 
 	if (!fp)
 		return -1;
-	return read_all_stream(fp, out);
+	len = ch_read_stream(fp, out);
+	if (len < 0) {
+		pclose(fp);
+		return -1;
+	}
+	status = pclose(fp);
+	if (status == -1)
+		return -1;
+	return len;
 }

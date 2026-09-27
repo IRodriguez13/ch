@@ -1,7 +1,3 @@
 *.o
-*.a
+/ch
 /ch-adds
-/build/
-*.core
-*.swp
-.DS_Store

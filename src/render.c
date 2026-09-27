@@ -1,4 +1,4 @@
-#include "ch_adds.h"
+#include "ch.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -18,6 +18,11 @@ static bool line_is_removal(const char *line)
 static bool line_is_context(const char *line)
 {
 	return line[0] == ' ' && line[1] != '\0';
+}
+
+static bool line_is_unified_meta(const char *line)
+{
+	return strncmp(line, "--- ", 4) == 0 || strncmp(line, "+++ ", 4) == 0;
 }
 
 static int parse_hunk_lines(const char *hunk, int *old_line, int *new_line)
@@ -204,7 +209,7 @@ static void flush_file_section(const ch_config_t *cfg, const char *path, char **
 		goto reset;
 	if (cfg->quiet && !*first_out)
 		printf("\n");
-	if (cfg->quiet)
+	if (cfg->quiet && cfg->quiet_path_labels)
 		printf("%s\n", path);
 	file_cfg = *cfg;
 	snprintf(file_cfg.file, sizeof(file_cfg.file), "%s", path);
@@ -218,6 +223,109 @@ reset:
 	*slen = 0;
 	if (scap)
 		*scap = 0;
+}
+
+static void path_from_unified_header(const ch_config_t *cfg, const char *minus,
+				     const char *plus, char *out, size_t out_sz)
+{
+	char from_plus[CH_PATH_MAX];
+	char from_minus[CH_PATH_MAX];
+
+	from_plus[0] = '\0';
+	from_minus[0] = '\0';
+	if (plus)
+		ch_diff_display_path(cfg, plus, from_plus, sizeof(from_plus));
+	if (minus)
+		ch_diff_display_path(cfg, minus, from_minus, sizeof(from_minus));
+	if (from_plus[0] != '\0')
+		snprintf(out, out_sz, "%s", from_plus);
+	else if (from_minus[0] != '\0')
+		snprintf(out, out_sz, "%s", from_minus);
+	else
+		out[0] = '\0';
+}
+
+char *ch_unified_hunks_only(const char *diff_text)
+{
+	char *copy = strdup(diff_text ? diff_text : "");
+	char *save = NULL;
+	char *line;
+	char *out = NULL;
+	size_t len = 0;
+	size_t cap = 0;
+
+	if (!copy)
+		return NULL;
+	line = strtok_r(copy, "\n", &save);
+	while (line) {
+		if (strncmp(line, "@@", 2) == 0 || line_is_addition(line) ||
+		    line_is_removal(line) || line_is_context(line)) {
+			if (append_section_line(&out, &len, &cap, line) != 0) {
+				free(out);
+				free(copy);
+			 return NULL;
+			}
+		}
+		line = strtok_r(NULL, "\n", &save);
+	}
+	free(copy);
+	if (!out) {
+		out = malloc(1);
+		if (out)
+			out[0] = '\0';
+	}
+	return out;
+}
+
+int ch_render_unified_diff(const ch_config_t *cfg, const char *diff_text)
+{
+	char *copy = strdup(diff_text ? diff_text : "");
+	char *save = NULL;
+	char *line;
+	char current[CH_PATH_MAX] = "";
+	char minus_hdr[CH_PATH_MAX] = "";
+	char plus_hdr[CH_PATH_MAX] = "";
+	char *section = NULL;
+	size_t slen = 0;
+	size_t scap = 0;
+	bool first = true;
+
+	if (!copy)
+		return 0;
+	line = strtok_r(copy, "\n", &save);
+	while (line) {
+		if (strncmp(line, "--- ", 4) == 0) {
+			flush_file_section(cfg, current[0] ? current : NULL, &section,
+					   &slen, &scap, &first);
+			snprintf(minus_hdr, sizeof(minus_hdr), "%s", line);
+			plus_hdr[0] = '\0';
+			current[0] = '\0';
+		} else if (strncmp(line, "+++ ", 4) == 0) {
+			snprintf(plus_hdr, sizeof(plus_hdr), "%s", line);
+			path_from_unified_header(cfg, minus_hdr, plus_hdr, current,
+						 sizeof(current));
+		} else if (strncmp(line, "Binary files ", 13) == 0) {
+			flush_file_section(cfg, current[0] ? current : NULL, &section,
+					   &slen, &scap, &first);
+			current[0] = '\0';
+			minus_hdr[0] = '\0';
+			plus_hdr[0] = '\0';
+		} else if (current[0] && !line_is_unified_meta(line) &&
+			   (strncmp(line, "@@", 2) == 0 || line_is_addition(line) ||
+			    line_is_removal(line) || line_is_context(line))) {
+			if (append_section_line(&section, &slen, &scap, line) != 0) {
+				free(section);
+				free(copy);
+				return 1;
+			}
+		}
+		line = strtok_r(NULL, "\n", &save);
+	}
+	flush_file_section(cfg, current[0] ? current : NULL, &section, &slen, &scap,
+			   &first);
+	free(section);
+	free(copy);
+	return 0;
 }
 
 int ch_render_repo_diff(const ch_config_t *cfg, const char *diff_text)
@@ -242,7 +350,7 @@ int ch_render_repo_diff(const ch_config_t *cfg, const char *diff_text)
 					   &scap, &first);
 			current[0] = '\0';
 			if (bpath)
-				snprintf(current, sizeof(current), "%s", bpath + 2);
+				snprintf(current, sizeof(current), "%s", bpath + 3);
 		} else if (current[0] && strncmp(line, "+++ b/", 6) == 0) {
 			snprintf(current, sizeof(current), "%s", line + 6);
 		} else if (current[0] && !diff_line_is_meta(line)) {

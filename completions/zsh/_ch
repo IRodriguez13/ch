@@ -1,0 +1,33 @@
+#compdef ch
+# zsh completion for ch(1)
+
+_ch_refs() {
+	local refs=(HEAD develop)
+	if git rev-parse --git-dir >/dev/null 2>&1; then
+		refs+=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads refs/tags 2>/dev/null)"})
+	fi
+	_wanted refs expl 'git reference' compadd -a refs
+}
+
+_ch() {
+	local context state line
+	_arguments -C \
+		'(-r --ref)'{-r+,--ref=}'[Git reference or range]:reference:_ch_refs' \
+		'(-p --patch)'{-p+,--patch=}'[Patch file]:patch file:_files -g "*.patch"' \
+		'--staged[Only staged changes]' \
+		'--unstaged[Only unstaged changes]' \
+		'(-2 --two-dot)'{-2,--two-dot}'[Use branch..HEAD]' \
+		'(-x --exact)'{-x,--exact}'[Diff against REF exactly]' \
+		'(-q --quiet)'{-q,--quiet}'[No header or line numbers]' \
+		'(-0 --plain)'{-0,--plain}'[With -q, omit +/- prefix]' \
+		'(-d --removed)'{-d,--removed}'[Also show removed lines]' \
+		'(-a --all)'{-a,--all}'[All changed files in repo]' \
+		'--diff[Compare two directory trees]:directory:_files -/' \
+		'*--exclude[Skip paths in --diff]:pattern:' \
+		'(-h --help)'{-h,--help}'[Show help]' \
+		'(-V --version)'{-V,--version}'[Show version]' \
+		'*:file:_files' \
+		'2:reference:_ch_refs'
+}
+
+_ch "$@"

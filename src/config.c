@@ -1,7 +1,10 @@
-#include "ch_adds.h"
+#include "ch.h"
 
+#include <dirent.h>
 #include <getopt.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void ch_config_init(ch_config_t *cfg)
@@ -33,10 +36,94 @@ static bool ch_is_all_token(const char *arg)
 	return strcmp(arg, ".") == 0 || strcmp(arg, "*") == 0;
 }
 
+static bool ch_argv_is_shell_glob_star(const ch_config_t *cfg)
+{
+	DIR *d;
+	struct dirent *e;
+	int cwd_count = 0;
+
+	if (cfg->all_files || cfg->file_count < 1 ||
+	    cfg->mode == CH_MODE_PATCH || cfg->mode == CH_MODE_DIFF)
+		return false;
+
+	d = opendir(".");
+	if (!d)
+		return false;
+	while ((e = readdir(d)) != NULL) {
+		if (e->d_name[0] == '.')
+			continue;
+		cwd_count++;
+	}
+	closedir(d);
+
+	if (cfg->file_count != cwd_count || cwd_count < 2)
+		return false;
+
+	d = opendir(".");
+	if (!d)
+		return false;
+	while ((e = readdir(d)) != NULL) {
+		int i;
+		bool found = false;
+
+		if (e->d_name[0] == '.')
+			continue;
+		for (i = 0; i < cfg->file_count; i++) {
+			if (strcmp(cfg->files[i], e->d_name) == 0) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			closedir(d);
+			return false;
+		}
+	}
+	closedir(d);
+	return true;
+}
+
+static int ch_add_exclude(ch_config_t *cfg, const char *pattern)
+{
+	if (cfg->exclude_count >= CH_MAX_EXCLUDES) {
+		fprintf(stderr, "ch: too many --exclude patterns (max %d)\n",
+			CH_MAX_EXCLUDES);
+		return -1;
+	}
+	snprintf(cfg->excludes[cfg->exclude_count], CH_EXCLUDE_MAX, "%s", pattern);
+	cfg->exclude_count++;
+	return 0;
+}
+
+static int ch_strip_diff_args(ch_config_t *cfg, int *argc, char **argv)
+{
+	int ac = *argc;
+	char **av = argv;
+	int w = 1;
+
+	for (int i = 1; i < ac;) {
+		if (strcmp(av[i], "--diff") == 0) {
+			if (i + 2 >= ac) {
+				fprintf(stderr, "ch: --diff requires DIR1 and DIR2\n");
+				return -1;
+			}
+			cfg->mode = CH_MODE_DIFF;
+			cfg->show_removed = true;
+			snprintf(cfg->diff_dir_a, sizeof(cfg->diff_dir_a), "%s", av[i + 1]);
+			snprintf(cfg->diff_dir_b, sizeof(cfg->diff_dir_b), "%s", av[i + 2]);
+			i += 3;
+			continue;
+		}
+		av[w++] = av[i++];
+	}
+	*argc = w;
+	return 0;
+}
+
 static int ch_add_file(ch_config_t *cfg, const char *path)
 {
 	if (cfg->file_count >= CH_MAX_FILES) {
-		fprintf(stderr, "ch-adds: too many files (max %d)\n", CH_MAX_FILES);
+		fprintf(stderr, "ch: too many files (max %d)\n", CH_MAX_FILES);
 		return -1;
 	}
 	snprintf(cfg->files[cfg->file_count], CH_PATH_MAX, "%s", path);
@@ -47,8 +134,8 @@ static int ch_add_file(ch_config_t *cfg, const char *path)
 void ch_config_usage(FILE *out)
 {
 	fprintf(out,
-		"Usage: ch-adds [file...] [reference] [options]\n"
-		"       ch-adds [options]                 (all changed files in repo)\n"
+		"Usage: ch [file...] [reference] [options]\n"
+		"       ch [options]                 (all changed files in repo)\n"
 		"\n"
 		"Show only added lines (+) from a file vs a git ref or patch file.\n"
 		"\n"
@@ -71,17 +158,22 @@ void ch_config_usage(FILE *out)
 		"  -0, --plain          with -q: omit leading +/- on each line\n"
 		"  -d, --removed        also show removed lines (-), in diff order\n"
 		"  -a, --all            all changed files in the repo (default with no file)\n"
+		"      --diff DIR1 DIR2 compare two directory trees (mirror / no shared git)\n"
+		"      --exclude PAT    skip paths in --diff (repeatable; .git always skipped)\n"
 		"  -h, --help           show this help\n"
 		"  -V, --version        show version and license\n"
 		"\n"
 		"Examples:\n"
-		"  ch-adds dojo/home/views.py\n"
-		"  ch-adds k8s/pre/all/values.yaml develop\n"
-		"  ch-adds dojo/foo.py --staged\n"
-		"  ch-adds dojo/foo.py -p /tmp/fix.patch\n"
-		"  ch-adds dojo/foo.py develop..HEAD\n"
-		"  ch-adds -d                         # all changed files, + and -\n"
-		"  ch-adds -a --staged              # all staged files\n");
+		"  ch dojo/home/views.py\n"
+		"  ch k8s/pre/all/values.yaml develop\n"
+		"  ch dojo/foo.py --staged\n"
+		"  ch dojo/foo.py -p /tmp/fix.patch\n"
+		"  ch dojo/foo.py develop..HEAD\n"
+		"  ch -d                         # all changed files, + and -\n"
+		"  ch -d *                       # same (shell glob -> all files)\n"
+		"  ch -a --staged              # all staged files\n"
+		"  ch --diff ~/proj-a ~/proj-b dojo/foo.py\n"
+		"  ch --diff ~/mirror ~/laptop -a --exclude=related --exclude=.env\n");
 }
 
 static void ch_resolve_git_range(ch_config_t *cfg)
@@ -120,13 +212,51 @@ static void ch_resolve_git_range(ch_config_t *cfg)
 	snprintf(cfg->ref_label, sizeof(cfg->ref_label), "%s...HEAD", cfg->ref);
 }
 
+static void ch_normalize_diff_dir(char *dir, size_t dir_sz)
+{
+	char resolved[CH_PATH_MAX];
+	size_t len;
+
+	(void)dir_sz;
+	if (realpath(dir, resolved))
+		snprintf(dir, dir_sz, "%s", resolved);
+	len = strlen(dir);
+	while (len > 1 && dir[len - 1] == '/') {
+		dir[len - 1] = '\0';
+		len--;
+	}
+}
+
 int ch_config_finalize(ch_config_t *cfg)
 {
 	char alt[CH_PATH_MAX + 4];
 
+	if (cfg->mode == CH_MODE_DIFF) {
+		ch_normalize_diff_dir(cfg->diff_dir_a, sizeof(cfg->diff_dir_a));
+		ch_normalize_diff_dir(cfg->diff_dir_b, sizeof(cfg->diff_dir_b));
+		if (!ch_file_exists(cfg->diff_dir_a)) {
+			fprintf(stderr, "ch: directory not found: %s\n", cfg->diff_dir_a);
+			return 1;
+		}
+		if (!ch_file_exists(cfg->diff_dir_b)) {
+			fprintf(stderr, "ch: directory not found: %s\n", cfg->diff_dir_b);
+			return 1;
+		}
+		snprintf(cfg->ref_label, sizeof(cfg->ref_label), "%.120s → %.120s",
+			 cfg->diff_dir_a, cfg->diff_dir_b);
+		if (cfg->file_count == 0)
+			cfg->all_files = true;
+		else
+			snprintf(cfg->file, sizeof(cfg->file), "%s", cfg->files[0]);
+		return 0;
+	}
 	if (cfg->mode == CH_MODE_PATCH) {
 		snprintf(cfg->ref_label, sizeof(cfg->ref_label), "patch:%.200s", cfg->patch_path);
 		return 0;
+	}
+	if (ch_argv_is_shell_glob_star(cfg)) {
+		cfg->all_files = true;
+		cfg->file_count = 0;
 	}
 	if (cfg->all_files) {
 		ch_resolve_git_range(cfg);
@@ -137,7 +267,7 @@ int ch_config_finalize(ch_config_t *cfg)
 	if (!ch_file_exists(cfg->file)) {
 		snprintf(alt, sizeof(alt), "./%s", cfg->file);
 		if (!ch_file_exists(alt)) {
-			fprintf(stderr, "ch-adds: file not found: %s\n", cfg->file);
+			fprintf(stderr, "ch: file not found: %s\n", cfg->file);
 			return 1;
 		}
 	}
@@ -158,6 +288,7 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		{"plain", no_argument, NULL, '0'},
 		{"removed", no_argument, NULL, 'd'},
 		{"all", no_argument, NULL, 'a'},
+		{"exclude", required_argument, NULL, 'X'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 		{NULL, 0, NULL, 0}
@@ -166,7 +297,9 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 	int opt;
 
 	ch_config_init(cfg);
-	while ((opt = getopt_long(argc, argv, "r:p:2xq0dhSaSUV", long_opts, NULL)) != -1) {
+	if (ch_strip_diff_args(cfg, &argc, argv) != 0)
+		return 1;
+	while ((opt = getopt_long(argc, argv, "r:p:2xq0dhSaSUVX:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'r':
 			snprintf(cfg->ref, sizeof(cfg->ref), "%s", optarg);
@@ -199,6 +332,10 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		case 'a':
 			cfg->all_files = true;
 			break;
+		case 'X':
+			if (ch_add_exclude(cfg, optarg) != 0)
+				return 1;
+			break;
 		case 'h':
 			cfg->show_help = true;
 			return 0;
@@ -213,12 +350,14 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		positional++;
 
 	if (positional == 0) {
-		if (!cfg->show_help && !cfg->show_version && cfg->mode != CH_MODE_PATCH)
+		if (!cfg->show_help && !cfg->show_version &&
+		    cfg->mode != CH_MODE_PATCH && cfg->mode != CH_MODE_DIFF)
 			cfg->all_files = true;
 	} else if (positional == 1) {
 		if (ch_is_all_token(argv[optind]))
 			cfg->all_files = true;
-		else if (ch_looks_like_ref(argv[optind]) && cfg->mode != CH_MODE_PATCH) {
+		else if (ch_looks_like_ref(argv[optind]) && cfg->mode != CH_MODE_PATCH &&
+			 cfg->mode != CH_MODE_DIFF) {
 			snprintf(cfg->ref, sizeof(cfg->ref), "%s", argv[optind]);
 			cfg->all_files = true;
 		} else if (ch_add_file(cfg, argv[optind]) != 0)
@@ -227,7 +366,8 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		int last = argc - 1;
 		const char *ref_arg = NULL;
 
-		if (ch_looks_like_ref(argv[last]) && strcmp(cfg->ref, "HEAD") == 0) {
+		if (ch_looks_like_ref(argv[last]) && strcmp(cfg->ref, "HEAD") == 0 &&
+		    cfg->mode != CH_MODE_DIFF) {
 			ref_arg = argv[last];
 			last--;
 		}
@@ -245,7 +385,8 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 	}
 	if (cfg->all_files)
 		cfg->file_count = 0;
-	if (!cfg->all_files && cfg->file_count == 0 && !cfg->show_help && !cfg->show_version) {
+	if (!cfg->all_files && cfg->file_count == 0 && !cfg->show_help && !cfg->show_version &&
+	    cfg->mode != CH_MODE_DIFF) {
 		ch_config_usage(stderr);
 		return 1;
 	}
@@ -257,12 +398,22 @@ int ch_config_parse(ch_config_t *cfg, int argc, char **argv)
 		cfg->mode = CH_MODE_PATCH;
 	}
 	if (cfg->mode == CH_MODE_PATCH && strlen(cfg->patch_path) == 0) {
-		fprintf(stderr, "ch-adds: missing patch file (-p)\n");
+		fprintf(stderr, "ch: missing patch file (-p)\n");
 		return 1;
 	}
 	if (cfg->scope != CH_SCOPE_HEAD && cfg->mode == CH_MODE_PATCH) {
-		fprintf(stderr, "ch-adds: --staged/--unstaged only apply to git mode\n");
+		fprintf(stderr, "ch: --staged/--unstaged only apply to git mode\n");
 		return 1;
+	}
+	if (cfg->mode == CH_MODE_DIFF) {
+		if (strlen(cfg->patch_path) > 0) {
+			fprintf(stderr, "ch: --patch cannot be used with --diff\n");
+			return 1;
+		}
+		if (cfg->scope != CH_SCOPE_HEAD) {
+			fprintf(stderr, "ch: --staged/--unstaged only apply to git mode\n");
+			return 1;
+		}
 	}
 	return 0;
 }

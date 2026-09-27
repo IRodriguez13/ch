@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — build and install ch-adds
+# install.sh — build and install ch
 set -euo pipefail
 
 PREFIX="${PREFIX:-${HOME}/.local}"
@@ -55,16 +55,14 @@ fi
 make clean all
 make PREFIX="$PREFIX" install
 
+installed="$PREFIX/bin/ch"
 echo ""
 echo "Installed:"
-echo "  $PREFIX/bin/ch-adds"
-echo "  $PREFIX/share/man/man1/ch-adds.1"
-echo "  $PREFIX/share/bash-completion/completions/ch-adds"
-echo "  $PREFIX/share/zsh/site-functions/_ch-adds"
-echo "  $PREFIX/share/fish/vendor_completions.d/ch-adds.fish"
-echo ""
-echo "Optional shell alias (~/.bashrc):"
-echo "  ch() { command ch-adds \"\$@\"; }"
+echo "  $installed"
+echo "  $PREFIX/share/man/man1/ch.1"
+echo "  $PREFIX/share/bash-completion/completions/ch"
+echo "  $PREFIX/share/zsh/site-functions/_ch"
+echo "  $PREFIX/share/fish/vendor_completions.d/ch.fish"
 echo ""
 echo "Shell completions (bash / zsh / fish):"
 echo "  bash: needs bash-completion; loads from \$PREFIX/share/bash-completion/completions"
@@ -72,3 +70,18 @@ echo "  zsh:  add to fpath, e.g. fpath=(\$HOME/.local/share/zsh/site-functions \
 echo "  fish: auto-loads vendor_completions.d on startup"
 echo ""
 echo "Ensure \$PREFIX/bin is in PATH."
+
+if declare -F ch >/dev/null 2>&1; then
+  echo ""
+  echo "WARNING: shell function 'ch' is defined (e.g. ch() { command ch-adds ... })."
+  echo "Remove that alias from ~/.bashrc — the installed binary is already named 'ch'."
+fi
+
+if command -v ch >/dev/null 2>&1; then
+  active="$(command -v ch)"
+  if [[ "$active" != "$installed" ]]; then
+    echo ""
+    echo "WARNING: 'ch' in PATH is $active, not $installed."
+    echo "Run 'hash -r' or open a new shell after install."
+  fi
+fi

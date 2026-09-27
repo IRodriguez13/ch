@@ -9,38 +9,43 @@ CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -D_POSIX_C_SOURCE=200809L
 LDFLAGS ?=
 
-SRC = src/main.c src/config.c src/git.c src/patch.c src/render.c src/util.c src/version.c
+SRC = src/main.c src/config.c src/git.c src/patch.c src/render.c src/util.c \
+      src/version.c src/dirdiff.c
 OBJ = $(SRC:.c=.o)
 
 .PHONY: all clean install uninstall test
 
-all: ch-adds
+all: ch
 
-ch-adds: $(OBJ)
+ch: $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $(OBJ) $(LDFLAGS)
 
-src/%.o: src/%.c include/ch_adds.h
+src/%.o: src/%.c include/ch.h
 	$(CC) $(CFLAGS) -Iinclude -c -o $@ $<
 
-install: ch-adds
+install: ch
 	install -d "$(BINDIR)" "$(MANDIR)" \
 		"$(BASH_COMPLETION_DIR)" "$(ZSH_COMPLETION_DIR)" "$(FISH_COMPLETION_DIR)"
-	install -m 755 ch-adds "$(BINDIR)/ch-adds"
-	install -m 644 man/ch-adds.1 "$(MANDIR)/ch-adds.1"
-	install -m 644 completions/bash/ch-adds "$(BASH_COMPLETION_DIR)/ch-adds"
-	install -m 644 completions/zsh/_ch-adds "$(ZSH_COMPLETION_DIR)/_ch-adds"
-	install -m 644 completions/fish/ch-adds.fish "$(FISH_COMPLETION_DIR)/ch-adds.fish"
+	install -m 755 ch "$(BINDIR)/ch"
+	install -m 644 man/ch.1 "$(MANDIR)/ch.1"
+	install -m 644 completions/bash/ch "$(BASH_COMPLETION_DIR)/ch"
+	install -m 644 completions/zsh/_ch "$(ZSH_COMPLETION_DIR)/_ch"
+	install -m 644 completions/fish/ch.fish "$(FISH_COMPLETION_DIR)/ch.fish"
 	-command -v mandb >/dev/null 2>&1 && mandb -q "$(MANDIR)" 2>/dev/null || true
 
 uninstall:
+	rm -f "$(BINDIR)/ch" "$(MANDIR)/ch.1" \
+		"$(BASH_COMPLETION_DIR)/ch" \
+		"$(ZSH_COMPLETION_DIR)/_ch" \
+		"$(FISH_COMPLETION_DIR)/ch.fish"
 	rm -f "$(BINDIR)/ch-adds" "$(MANDIR)/ch-adds.1" \
 		"$(BASH_COMPLETION_DIR)/ch-adds" \
 		"$(ZSH_COMPLETION_DIR)/_ch-adds" \
 		"$(FISH_COMPLETION_DIR)/ch-adds.fish"
 
-test: ch-adds
-	@./tests/smoke.sh "$(CURDIR)/ch-adds"
+test: ch
+	@./tests/smoke.sh "$(CURDIR)/ch"
 	@./tests/completions.sh
 
 clean:
-	rm -f $(OBJ) ch-adds
+	rm -f $(OBJ) ch ch-adds

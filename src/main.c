@@ -1,10 +1,10 @@
 /*
- * ch-adds — show only added lines from a file diff
+ * ch — show only added lines from a file diff
  * Copyright (C) 2026 Iván Ezequiel Rodriguez
  * License: GPLv3+
  */
 
-#include "ch_adds.h"
+#include "ch.h"
 #include "version.h"
 
 #include <stdio.h>
@@ -23,7 +23,7 @@ static int process_one_file(ch_config_t *cfg, bool skip_empty_msg)
 			return 1;
 	} else {
 		if (ch_git_diff(cfg, &diff_text) != 0) {
-			fprintf(stderr, "ch-adds: failed to run git diff\n");
+			fprintf(stderr, "ch: failed to run git diff\n");
 			return 1;
 		}
 	}
@@ -38,7 +38,7 @@ static int process_one_file(ch_config_t *cfg, bool skip_empty_msg)
 			const char *what = cfg->show_removed ? "no changes" : "no additions";
 
 			ch_normalize_path(cfg->file, norm, sizeof(norm));
-			fprintf(stderr, "%sch-adds:%s %s in %s%s%s vs %s%s%s\n",
+			fprintf(stderr, "%sch:%s %s in %s%s%s vs %s%s%s\n",
 				dim, reset, what, cyan, norm, reset, yellow, cfg->ref_label,
 				reset);
 		}
@@ -46,7 +46,22 @@ static int process_one_file(ch_config_t *cfg, bool skip_empty_msg)
 		return 0;
 	}
 
-	rc = ch_render_changes(cfg, diff_text, &add_count, &rem_count);
+	/* Directory pathspecs (and any multi-file git output) must be split so
+	 * each section header is the exact file, not the pathspec ("src"). */
+	if (strstr(diff_text, "diff --git ") != NULL) {
+		const char *p = diff_text;
+		int nfiles = 0;
+
+		while ((p = strstr(p, "diff --git ")) != NULL) {
+			nfiles++;
+			p += 11;
+		}
+		if (nfiles > 1)
+			cfg->quiet_path_labels = true;
+		rc = ch_render_repo_diff(cfg, diff_text);
+	} else {
+		rc = ch_render_changes(cfg, diff_text, &add_count, &rem_count);
+	}
 	free(diff_text);
 	return rc == 0 ? 0 : 1;
 }
@@ -56,8 +71,9 @@ static int process_all_files(ch_config_t *cfg)
 	char *diff_text = NULL;
 	int rc = 0;
 
+	cfg->quiet_path_labels = true;
 	if (ch_git_diff_repo(cfg, &diff_text) != 0) {
-		fprintf(stderr, "ch-adds: failed to run git diff\n");
+		fprintf(stderr, "ch: failed to run git diff\n");
 		return 1;
 	}
 	if (!diff_text || !ch_diff_has_relevant_lines(cfg, diff_text)) {
@@ -67,7 +83,7 @@ static int process_all_files(ch_config_t *cfg)
 			const char *reset = ch_color_enabled() ? "\033[0m" : "";
 			const char *what = cfg->show_removed ? "no changes" : "no additions";
 
-			fprintf(stderr, "%sch-adds:%s %s in repository vs %s%s%s\n",
+			fprintf(stderr, "%sch:%s %s in repository vs %s%s%s\n",
 				dim, reset, what, yellow, cfg->ref_label, reset);
 		}
 		free(diff_text);
@@ -87,13 +103,14 @@ static int process_file_list(ch_config_t *cfg)
 		char *diff_text = NULL;
 		int adds = 0;
 		int rems = 0;
+		int one_rc;
 
 		snprintf(cfg->file, sizeof(cfg->file), "%s", cfg->files[i]);
 		if (cfg->mode == CH_MODE_PATCH) {
 			if (ch_patch_extract(cfg, &diff_text) != 0)
 				return 1;
 		} else if (ch_git_diff(cfg, &diff_text) != 0) {
-			fprintf(stderr, "ch-adds: failed to run git diff\n");
+			fprintf(stderr, "ch: failed to run git diff\n");
 			return 1;
 		}
 		if (!ch_diff_has_relevant_lines(cfg, diff_text)) {
@@ -102,7 +119,113 @@ static int process_file_list(ch_config_t *cfg)
 		}
 		if (any && !cfg->quiet)
 			printf("\n");
-		if (ch_render_changes(cfg, diff_text, &adds, &rems) != 0)
+		if (strstr(diff_text, "diff --git ") != NULL) {
+			const char *p = diff_text;
+			int nfiles = 0;
+
+			while ((p = strstr(p, "diff --git ")) != NULL) {
+				nfiles++;
+				p += 11;
+			}
+			if (nfiles > 1)
+				cfg->quiet_path_labels = true;
+			one_rc = ch_render_repo_diff(cfg, diff_text);
+		} else {
+			one_rc = ch_render_changes(cfg, diff_text, &adds, &rems);
+		}
+		if (one_rc != 0)
+			rc = 1;
+		else
+			any = true;
+		free(diff_text);
+	}
+	return rc;
+}
+
+static int process_diff_all(ch_config_t *cfg)
+{
+	char *diff_text = NULL;
+	int rc = 0;
+
+	cfg->quiet_path_labels = true;
+	if (ch_diff_tree(cfg, &diff_text) != 0) {
+		fprintf(stderr, "ch: failed to run diff\n");
+		return 1;
+	}
+	if (!diff_text || !ch_diff_has_relevant_lines(cfg, diff_text)) {
+		if (!cfg->quiet) {
+			const char *dim = ch_color_enabled() ? "\033[2m" : "";
+			const char *yellow = ch_color_enabled() ? "\033[33m" : "";
+			const char *reset = ch_color_enabled() ? "\033[0m" : "";
+
+			fprintf(stderr, "%sch:%s no differences between %s%s%s and %s%s%s\n",
+				dim, reset, yellow, cfg->diff_dir_a, reset, yellow,
+				cfg->diff_dir_b, reset);
+		}
+		free(diff_text);
+		return 0;
+	}
+	rc = ch_render_unified_diff(cfg, diff_text);
+	free(diff_text);
+	return rc == 0 ? 0 : 1;
+}
+
+static int process_diff_one(ch_config_t *cfg)
+{
+	char *diff_text = NULL;
+	int rc;
+
+	if (ch_diff_file(cfg, cfg->file, &diff_text) != 0) {
+		fprintf(stderr, "ch: failed to run diff\n");
+		return 1;
+	}
+	if (!ch_diff_has_relevant_lines(cfg, diff_text)) {
+		if (!cfg->quiet) {
+			const char *dim = ch_color_enabled() ? "\033[2m" : "";
+			const char *cyan = ch_color_enabled() ? "\033[36m" : "";
+			const char *yellow = ch_color_enabled() ? "\033[33m" : "";
+			const char *reset = ch_color_enabled() ? "\033[0m" : "";
+
+			fprintf(stderr, "%sch:%s no differences in %s%s%s between mirrors\n",
+				dim, reset, cyan, cfg->file, reset);
+			(void)yellow;
+		}
+		free(diff_text);
+		return 0;
+	}
+	{
+		char *hunks = ch_unified_hunks_only(diff_text);
+
+		free(diff_text);
+		if (!hunks)
+			return 1;
+		rc = ch_render_changes(cfg, hunks, NULL, NULL);
+		free(hunks);
+	}
+	return rc == 0 ? 0 : 1;
+}
+
+static int process_diff_list(ch_config_t *cfg)
+{
+	int rc = 0;
+	bool any = false;
+
+	cfg->quiet_path_labels = true;
+	for (int i = 0; i < cfg->file_count; i++) {
+		char *diff_text = NULL;
+
+		snprintf(cfg->file, sizeof(cfg->file), "%s", cfg->files[i]);
+		if (ch_diff_file(cfg, cfg->file, &diff_text) != 0) {
+			fprintf(stderr, "ch: failed to run diff\n");
+			return 1;
+		}
+		if (!ch_diff_has_relevant_lines(cfg, diff_text)) {
+			free(diff_text);
+			continue;
+		}
+		if (any && !cfg->quiet)
+			printf("\n");
+		if (ch_render_unified_diff(cfg, diff_text) != 0)
 			rc = 1;
 		else
 			any = true;
@@ -129,11 +252,19 @@ int main(int argc, char **argv)
 	if (ch_config_finalize(&cfg) != 0)
 		return 1;
 
-	if (cfg.all_files)
+	if (cfg.mode == CH_MODE_DIFF) {
+		if (cfg.all_files)
+			rc = process_diff_all(&cfg);
+		else if (cfg.file_count > 1)
+			rc = process_diff_list(&cfg);
+		else
+			rc = process_diff_one(&cfg);
+	} else if (cfg.all_files) {
 		rc = process_all_files(&cfg);
-	else if (cfg.file_count > 1)
+	} else if (cfg.file_count > 1) {
 		rc = process_file_list(&cfg);
-	else
+	} else {
 		rc = process_one_file(&cfg, false);
+	}
 	return rc;
 }

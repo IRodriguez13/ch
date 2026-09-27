@@ -1,6 +1,6 @@
-# bash completion for ch-adds(1) -*- shell-script -*-
+# bash completion for ch(1) -*- shell-script -*-
 
-_ch_adds_refs()
+_ch_refs()
 {
 	local refs='HEAD develop'
 
@@ -12,25 +12,34 @@ _ch_adds_refs()
 	COMPREPLY+=( $( compgen -f -X '!*.patch' -- "$cur" ) )
 }
 
-_ch_adds()
+_ch()
 {
 	local cur prev words cword
 	_init_completion || return
 
 	local flags='-r --ref -p --patch --staged --unstaged -2 --two-dot -x --exact
-	             -q --quiet -0 --plain -d --removed -a --all -h --help -V --version'
+	             -q --quiet -0 --plain -d --removed -a --all --diff --exclude
+	             -h --help -V --version'
 
 	case $prev in
 		-h|--help|-V|--version)
 			return
 			;;
 		-r|--ref)
-			_ch_adds_refs
+			_ch_refs
 			return
 			;;
 		-p|--patch)
 			compopt -o filenames 2>/dev/null
 			COMPREPLY=( $( compgen -f -- "$cur" ) )
+			return
+			;;
+		--exclude)
+			return
+			;;
+		--diff)
+			compopt -o filenames 2>/dev/null
+			COMPREPLY=( $( compgen -d -- "$cur" ) )
 			return
 			;;
 	esac
@@ -64,9 +73,9 @@ _ch_adds()
 		compopt -o filenames 2>/dev/null
 		COMPREPLY=( $( compgen -f -- "$cur" ) )
 	else
-		_ch_adds_refs
+		_ch_refs
 	fi
 } &&
-	complete -F _ch_adds ch-adds ch
+	complete -F _ch ch
 
 # ex: filetype=sh

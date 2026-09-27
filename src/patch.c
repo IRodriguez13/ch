@@ -1,4 +1,4 @@
-#include "ch_adds.h"
+#include "ch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +40,7 @@ int ch_patch_extract(const ch_config_t *cfg, char **out)
 		fp = stdin;
 	else {
 		if (!ch_file_exists(cfg->patch_path)) {
-			fprintf(stderr, "ch-adds: patch not found: %s\n", cfg->patch_path);
+			fprintf(stderr, "ch: patch not found: %s\n", cfg->patch_path);
 			return -1;
 		}
 		fp = fopen(cfg->patch_path, "r");
